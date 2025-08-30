@@ -1,6 +1,7 @@
-
+use clap::{Parser, Subcommand};
+use colored::*;
 use serde::{Serialize, Deserialize};
-use std::{env, fs, process};
+use std::{fs, process};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Task {
@@ -23,70 +24,81 @@ fn save_tasks(tasks: &Vec<Task>) {
     fs::write(FILE, data).expect("Unable to write file");
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: todo_cli [add <task> | list | done <index> | remove <index>]");
-        process::exit(1);
-    }
+#[derive(Parser)]
+#[command(name = "todo", version = "1.0", about = "A simple CLI To-Do app in Rust")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
 
+#[derive(Subcommand)]
+enum Commands {
+    Add { description: Vec<String>},
+    List,
+    Done {index: usize},
+    Remove {index: usize},
+}
+
+
+fn main() {
+    let cli = Cli::parse();
     let mut tasks = load_tasks();
 
-    match args[1].as_str() {
-        "add" => {
-            if args.len() < 3 {
-                eprintln!("Please provide a task description.");
-                process::exit(1);
-            }
-            let description = args[2..].join(" ");
-            tasks.push(Task {description, done: false});
+    match cli.command {
+        Commands::Add { description } => {
+            let desc = description.join(" ");
+            tasks.push(Task {
+                description: desc.clone(),
+                done: false,
+            });
             save_tasks(&tasks);
-            println!("Task Added!");
+            println!("{} {}", "✔️ Added task:".green().bold(), desc);
         }
 
-        "list" => {
+        Commands::List => {
             if tasks.is_empty() {
-                println!("No tasks yet");
-            }else {
+                println!("{}", "🎉 No tasks yet!".yellow().bold());
+            } else {
+                println!("{}", "📋 Your tasks:".blue().bold());
                 for (i, task) in tasks.iter().enumerate() {
-                    let status = if task.done {"[x]"} else {"[ ]"};
-                    println!("{} {} {}", i, status, task.description);
+                    let status = if task.done {
+                        "[x]".green()
+                    } else {
+                        "[ ]".red()
+                    };
+                    println!("{} {} {}", i.to_string().cyan(), status, task.description);
                 }
             }
         }
 
-        "done" => {
-            if args.len() < 3 {
-                eprintln!("Please provide the index of the task to mark as done.");
-                process::exit(1);
-            }
-            let index: usize = args[2].parse().expect("Index must be a number");
-            if index < tasks.len(){
+        Commands::Done { index } => {
+            if index < tasks.len() {
                 tasks[index].done = true;
                 save_tasks(&tasks);
-                println!("Task Marked as Done");
+                println!(
+                    "{} {}",
+                    "✔️ Marked as done:".green().bold(),
+                    tasks[index].description
+                );
             } else {
-                eprintln!("Invalid Index");
-            }
-        }
-
-        "remove" => {
-            if args.len() < 3 {
-                eprintln!("Please provide the index of the task to remove.");
+                eprintln!("{}", "❌ Invalid index".red().bold());
                 process::exit(1);
             }
-            let index: usize = args[2].parse().expect("Index must be a number");
-            if index < tasks.len() {
-                tasks.remove(index);
-                save_tasks(&tasks);
-                println!("Task Removed");
-            } else {
-                eprintln!("Invalid Index");
-            }
         }
 
-        _=>{
-            eprintln!("Unknown command: {}", args[1]);
+        Commands::Remove { index } => {
+            if index < tasks.len() {
+                let removed = tasks.remove(index);
+                save_tasks(&tasks);
+                println!(
+                    "{} {}",
+                    "🗑️ Removed task:".yellow().bold(),
+                    removed.description
+                );
+            } else {
+                eprintln!("{}", "❌ Invalid index".red().bold());
+                process::exit(1);
+            }
         }
     }
 }
